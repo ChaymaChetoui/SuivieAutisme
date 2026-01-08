@@ -2,7 +2,8 @@
 const EmotionRecord = require('../models/emotionRecord');
 const Child = require('../models/child');
 const mongoose = require('mongoose');
-
+const Therapist = require('../models/Therapist'); // AJOUTER CETTE LIGNE
+const ChildTherapist = require('../models/childTherapist');
 // ============================================
 // @desc    Créer un nouvel enregistrement d'émotion
 // @route   POST /api/emotions

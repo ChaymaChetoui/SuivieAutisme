@@ -25,6 +25,17 @@ const childService = {
     const response = await api.put(`/api/children/${childId}`, childData);
     return response;
   },
+   removeTherapistAssignment: async (childId) => {
+    try {
+      const response = await api.delete(`/children/${childId}/therapist-assignment`);
+      return response.data;
+    } catch (error) {
+      console.error('Error removing therapist assignment:', error);
+      throw error;
+    }
+  },
+
+  
 
   // Supprimer un enfant
   deleteChild: async (childId) => {

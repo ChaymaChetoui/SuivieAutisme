@@ -81,28 +81,40 @@ const TherapistPatients = () => {
   };
 
   const handleDeleteClick = (patient) => {
-    setSelectedPatient(patient);
-    setShowDeleteModal(true);
+    console.log('Delete clicked for:', patient.firstName);
+  console.log('Before set - showDeleteModal:', showDeleteModal);
+  
+  setSelectedPatient(patient);
+  setShowDeleteModal(true);
+  
+  // Log après le set (attention : les setState sont asynchrones)
+  setTimeout(() => {
+    console.log('After set - showDeleteModal should be true');
+  }, 100);
   };
 
-  const handleDeletePatient = async () => {
-    if (!selectedPatient) return;
+  // src/pages/TherapistPatients.jsx - MODIFIER handleDeletePatient
+// TEMPORAIRE - Solution de secours
+const handleDeletePatient = async () => {
+  if (!selectedPatient) return;
 
-    try {
-      setDeleting(true);
-      await childService.deleteChild(selectedPatient._id);
-      toast.success('Patient supprimé avec succès');
-      setPatients(prev => prev.filter(p => p._id !== selectedPatient._id));
-      setShowDeleteModal(false);
-      setSelectedPatient(null);
-    } catch (error) {
-      console.error('Error deleting patient:', error);
-      toast.error(error.response?.data?.message || 'Erreur lors de la suppression');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
+  try {
+    setDeleting(true);
+    
+    // Option temporaire: Utiliser deleteChild au lieu de removeTherapistAssignment
+    await therapistService.removeTherapistAssignment(selectedPatient._id);
+    
+    toast.success('Patient désassigné avec succès');
+    setPatients(prev => prev.filter(p => p._id !== selectedPatient._id));
+    setShowDeleteModal(false);
+    setSelectedPatient(null);
+  } catch (error) {
+    console.error('Error removing assignment', error);
+    toast.error(error.response?.data?.message || 'Erreur lors de la suppression');
+  } finally {
+    setDeleting(false);
+  }
+};
   const filteredPatients = patients.filter(patient => 
     patient.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     patient.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -413,12 +425,17 @@ const TherapistPatients = () => {
                     </button>
                     
                     <button
-                      onClick={() => handleDeleteClick(patient)}
-                      className="action-btn danger-btn"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="action-icon" />
-                    </button>
+                        onClick={(e) => {
+                            e.stopPropagation(); // Empêcher la propagation
+                            e.preventDefault(); // Empêcher le comportement par défaut
+                            handleDeleteClick(patient);
+                    
+                        }}
+                        className="action-btn danger-btn"
+                        title="Supprimer"
+                        >
+                        <Trash2 className="action-icon" />
+                        </button>
                   </div>
                 </div>
               ))}
@@ -454,75 +471,56 @@ const TherapistPatients = () => {
 
       {/* Delete Confirmation Modal */}
       <Modal
-        isOpen={showDeleteModal}
-        onClose={() => {
+         isOpen={showDeleteModal}
+  onClose={() => {
+    setShowDeleteModal(false);
+    setSelectedPatient(null);
+  }}
+  title="Désassigner le patient"
+  size="md"
+>
+  <div className="modal-content">
+    <div className="warning-section">
+      <AlertCircle className="warning-icon" />
+      <div className="warning-text">
+        <h4 className="warning-title">Attention !</h4>
+        <p className="warning-description">
+          Vous allez vous désassigner de ce patient. Vous ne pourrez plus accéder à ses données.
+          L'enfant ne sera pas supprimé du système.
+        </p>
+      </div>
+    </div>
+          
+
+          <div className="modal-actions">
+      <button
+        onClick={() => {
           setShowDeleteModal(false);
           setSelectedPatient(null);
         }}
-        title="Confirmer la suppression"
-        size="md"
+        className="btn btn-secondary"
+        disabled={deleting}
       >
-        <div className="modal-content">
-          <div className="warning-section">
-            <AlertCircle className="warning-icon" />
-            <div className="warning-text">
-              <h4 className="warning-title">Attention !</h4>
-              <p className="warning-description">
-                Cette action est irréversible. Toutes les données associées à ce patient seront définitivement supprimées.
-              </p>
-            </div>
-          </div>
-
-          {selectedPatient && (
-            <div className="patient-preview">
-              <div 
-                className="preview-avatar"
-                style={{ 
-                  background: `linear-gradient(135deg, ${getAgeColor(selectedPatient.age)}, ${getLevelColor(selectedPatient.autismLevel)})`
-                }}
-              >
-                {selectedPatient.firstName?.charAt(0).toUpperCase()}
-              </div>
-              <div className="preview-info">
-                <h4 className="preview-name">
-                  {selectedPatient.firstName} {selectedPatient.lastName}
-                </h4>
-                <p className="preview-details">
-                  {selectedPatient.age || '?'} ans • {selectedPatient.loginCode || 'Sans code'}
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="modal-actions">
-            <button
-              onClick={() => {
-                setShowDeleteModal(false);
-                setSelectedPatient(null);
-              }}
-              className="btn btn-secondary"
-              disabled={deleting}
-            >
-              Annuler
-            </button>
-            <button
-              onClick={handleDeletePatient}
-              className="btn btn-danger"
-              disabled={deleting}
-            >
-              {deleting ? (
-                <>
-                  <div className="spinner"></div>
-                  <span>Suppression...</span>
-                </>
-              ) : (
-                <>
-                  <Trash2 className="action-icon" />
-                  <span>Supprimer définitivement</span>
-                </>
-              )}
-            </button>
-          </div>
+        Annuler
+      </button>
+      <button
+        onClick={handleDeletePatient}
+        className="btn btn-danger"
+        disabled={deleting}
+      >
+        {deleting ? (
+          <>
+            <div className="spinner"></div>
+            <span>Désassignation...</span>
+          </>
+        ) : (
+          <>
+            <Trash2 className="action-icon" />
+            <span>Se désassigner</span>
+          </>
+        )}
+      </button>
+    </div>
         </div>
       </Modal>
 
@@ -1435,6 +1433,61 @@ const TherapistPatients = () => {
                     }
                   }
                 `}</style>
+                {/* Modal de debug temporaire */}
+{showDeleteModal && (
+  <div className="modal-debug-overlay" style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999
+  }}>
+    <div style={{
+      backgroundColor: 'white',
+      padding: '2rem',
+      borderRadius: '1rem',
+      maxWidth: '400px',
+      width: '90%',
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+    }}>
+      <h3 style={{ marginBottom: '1rem' }}>Supprimer {selectedPatient?.firstName} ?</h3>
+      <p>Êtes-vous sûr de vouloir supprimer ce patient ?</p>
+      <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+        <button
+          onClick={() => {
+            setShowDeleteModal(false);
+            setSelectedPatient(null);
+          }}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            border: '1px solid #ccc',
+            background: 'white'
+          }}
+        >
+          Annuler
+        </button>
+        <button
+          onClick={handleDeletePatient}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            background: '#ef4444',
+            color: 'white',
+            border: 'none'
+          }}
+        >
+          Supprimer
+        </button>
+      </div>
+    </div>
+  </div>
+)}
               </Layout>
             );
           };

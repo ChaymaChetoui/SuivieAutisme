@@ -5,6 +5,15 @@ const therapistService = {
     const response = await api.post('/api/therapist/init-profile');
     return response;
   },
+  // services/therapistService.js
+removeTherapistAssignment: async (childId) => {
+  try {
+    return await api.delete(`api/therapist/patients/${childId}`);
+  } catch (error) {
+    console.error('Error in removeTherapistAssignment:', error);
+    throw error;
+  }
+},
   // Rechercher des parents par email/nom
   searchParents: async (query) => {
     const response = await api.get('/api/therapist/search-parents', {

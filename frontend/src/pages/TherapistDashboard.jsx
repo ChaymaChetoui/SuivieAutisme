@@ -1,4 +1,4 @@
-// src/pages/TherapistDashboard.jsx - AVEC CSS COMPLET
+// src/pages/TherapistDashboard.jsx - VERSION CORRIGÉE
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -26,7 +26,8 @@ import {
   Target,
   Zap,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Shield
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -54,30 +55,76 @@ const TherapistDashboard = () => {
     try {
       setLoading(true);
       
-      // Récupérer les stats du thérapeute
-      const statsResponse = await therapistService.getTherapistStats();
-      setTherapistStats(statsResponse.data);
+      // Récupérer les stats du thérapeute avec gestion d'erreur
+      let therapistStatsData = null;
+      try {
+        const statsResponse = await therapistService.getTherapistStats();
+        therapistStatsData = statsResponse.data;
+        setTherapistStats(therapistStatsData);
+      } catch (error) {
+        console.warn('Error fetching therapist stats:', error);
+        therapistStatsData = { upcomingSessions: 0, completedSessions: 0 };
+      }
       
       // Récupérer les patients du thérapeute
-      const patientsResponse = await therapistService.getMyPatients();
-      const myPatients = patientsResponse.data || [];
+      let myPatients = [];
+      try {
+        const patientsResponse = await therapistService.getMyPatients();
+        myPatients = patientsResponse.data || [];
+      } catch (error) {
+        console.error('Error fetching patients:', error);
+        toast.error('Erreur lors du chargement des patients');
+        myPatients = [];
+      }
 
-      // Calculer les statistiques pour chaque patient
+      // Calculer les statistiques pour chaque patient avec gestion d'erreur
       const patientsWithStats = await Promise.all(
         myPatients.map(async (patient) => {
           try {
-            const emotionsResponse = await emotionService.getEmotionsByChild(patient._id, { limit: 50 });
-            const emotions = emotionsResponse.data || [];
+            // Récupérer les émotions avec timeout pour éviter les blocages
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 secondes timeout
+            
+            let emotions = [];
+            try {
+              const emotionsResponse = await emotionService.getEmotionsByChild(
+                patient._id, 
+                { limit: 50 },
+                { signal: controller.signal }
+              );
+              emotions = emotionsResponse.data || [];
+            } catch (error) {
+              if (error.name === 'AbortError') {
+                console.warn(`Timeout fetching emotions for patient ${patient._id}`);
+              } else if (error.response?.status === 404) {
+                // Patient n'a pas d'émotions encore - c'est normal
+                console.log(`No emotions found for patient ${patient._id}`);
+              } else if (error.response?.status === 500) {
+                console.error(`Server error for patient ${patient._id}:`, error);
+                // Continuer avec des données par défaut
+              } else {
+                console.error(`Error fetching emotions for patient ${patient._id}:`, error);
+              }
+            } finally {
+              clearTimeout(timeoutId);
+            }
+
             const negativeEmotions = emotions.filter(e => 
-              ['colère', 'peur', 'tristesse', 'dégoût'].includes(e.emotion)
+              e.emotion && ['colère', 'peur', 'tristesse', 'dégoût'].includes(e.emotion)
             );
+
             const positiveCount = emotions.filter(e => 
-              ['joie', 'surprise'].includes(e.emotion)
+              e.emotion && ['joie', 'surprise'].includes(e.emotion)
             ).length;
+
             const progress = emotions.length > 0 
               ? Math.round((positiveCount / emotions.length) * 100) 
               : 0;
-            const lastActivity = emotions[0]?.timestamp || patient.updatedAt || patient.createdAt;
+
+            const lastActivity = emotions[0]?.timestamp || 
+                                patient.updatedAt || 
+                                patient.createdAt || 
+                                null;
 
             return {
               ...patient,
@@ -85,30 +132,40 @@ const TherapistDashboard = () => {
               concerns: negativeEmotions.length,
               progress,
               lastActivity,
-              recentEmotions: emotions.slice(0, 3)
+              recentEmotions: emotions.slice(0, 3),
+              hasData: emotions.length > 0
             };
           } catch (error) {
-            console.error(`Error fetching data for patient ${patient._id}:`, error);
+            console.error(`Critical error processing patient ${patient._id}:`, error);
             return {
               ...patient,
               emotionCount: 0,
               concerns: 0,
               progress: 0,
-              lastActivity: patient.updatedAt || patient.createdAt,
-              recentEmotions: []
+              lastActivity: patient.updatedAt || patient.createdAt || null,
+              recentEmotions: [],
+              hasData: false
             };
           }
         })
       );
 
-      patientsWithStats.sort((a, b) => 
-        new Date(b.lastActivity) - new Date(a.lastActivity)
-      );
+      // Trier par dernière activité (les plus récents d'abord)
+      patientsWithStats.sort((a, b) => {
+        if (!a.lastActivity && !b.lastActivity) return 0;
+        if (!a.lastActivity) return 1;
+        if (!b.lastActivity) return -1;
+        return new Date(b.lastActivity) - new Date(a.lastActivity);
+      });
 
+      // Calculer les stats globales
       const totalEmotions = patientsWithStats.reduce((sum, p) => sum + p.emotionCount, 0);
       const totalConcerns = patientsWithStats.filter(p => p.concerns > 0).length;
-      const avgProgress = patientsWithStats.length > 0
-        ? Math.round(patientsWithStats.reduce((sum, p) => sum + p.progress, 0) / patientsWithStats.length)
+      
+      // Calculer la progression moyenne uniquement pour les patients avec données
+      const patientsWithEmotions = patientsWithStats.filter(p => p.emotionCount > 0);
+      const avgProgress = patientsWithEmotions.length > 0
+        ? Math.round(patientsWithEmotions.reduce((sum, p) => sum + p.progress, 0) / patientsWithEmotions.length)
         : 0;
 
       setStats({
@@ -116,30 +173,38 @@ const TherapistDashboard = () => {
         withConcerns: totalConcerns,
         totalEmotions,
         avgProgress,
-        upcomingSessions: therapistStats?.upcomingSessions || 0,
-        completedSessions: therapistStats?.completedSessions || 0
+        upcomingSessions: therapistStatsData?.upcomingSessions || 0,
+        completedSessions: therapistStatsData?.completedSessions || 0
       });
 
       setPatients(patientsWithStats);
 
+      // Activité récente - seulement les patients avec émotions
       const allEmotions = [];
-      for (const patient of patientsWithStats.slice(0, 3)) {
-        if (patient.recentEmotions && patient.recentEmotions.length > 0) {
-          patient.recentEmotions.forEach(emotion => {
+      for (const patient of patientsWithStats.filter(p => p.recentEmotions.length > 0).slice(0, 3)) {
+        patient.recentEmotions.forEach(emotion => {
+          if (emotion && emotion._id) {
             allEmotions.push({
               ...emotion,
-              patientName: `${patient.firstName} ${patient.lastName}`
+              patientName: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient'
             });
-          });
-        }
+          }
+        });
       }
       
-      allEmotions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      // Trier et limiter
+      allEmotions.sort((a, b) => {
+        if (!a.timestamp && !b.timestamp) return 0;
+        if (!a.timestamp) return 1;
+        if (!b.timestamp) return -1;
+        return new Date(b.timestamp) - new Date(a.timestamp);
+      });
+      
       setRecentActivity(allEmotions.slice(0, 5));
 
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      toast.error('Erreur lors du chargement du tableau de bord');
+      console.error('Critical error in fetchDashboardData:', error);
+      toast.error('Erreur critique lors du chargement du tableau de bord');
     } finally {
       setLoading(false);
     }
@@ -167,29 +232,40 @@ const TherapistDashboard = () => {
   };
 
   const getEmotionColor = (emotion) => {
+    if (!emotion) return '#9ca3af';
+    
     const colors = {
       'joie': '#fbbf24',
       'tristesse': '#60a5fa',
       'colère': '#ef4444',
       'peur': '#a78bfa',
       'surprise': '#f472b6',
-      'dégoût': '#84cc16'
+      'dégoût': '#84cc16',
+      'calme': '#34d399',
+      'excitation': '#f97316'
     };
     return colors[emotion] || '#9ca3af';
   };
 
   const formatDate = (date) => {
-    if (!date) return 'Jamais';
-    const d = new Date(date);
-    const now = new Date();
-    const diffHours = Math.floor((now - d) / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
+    if (!date) return 'Pas d\'activité';
     
-    if (diffHours < 1) return 'À l\'instant';
-    if (diffHours < 24) return `Il y a ${diffHours}h`;
-    if (diffDays === 1) return 'Hier';
-    if (diffDays < 7) return `Il y a ${diffDays}j`;
-    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    try {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return 'Date invalide';
+      
+      const now = new Date();
+      const diffHours = Math.floor((now - d) / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+      
+      if (diffHours < 1) return 'À l\'instant';
+      if (diffHours < 24) return `Il y a ${diffHours}h`;
+      if (diffDays === 1) return 'Hier';
+      if (diffDays < 7) return `Il y a ${diffDays}j`;
+      return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    } catch (error) {
+      return 'Date invalide';
+    }
   };
 
   if (loading) {
@@ -247,8 +323,17 @@ const TherapistDashboard = () => {
                 <h3 className="stat-value">{stats.totalPatients}</h3>
                 <p className="stat-label">Patients actifs</p>
                 <div className="stat-trend">
-                  <TrendingUp className="trend-icon" />
-                  <span>{stats.withConcerns} avec alertes</span>
+                  {stats.withConcerns > 0 ? (
+                    <>
+                      <AlertCircle className="trend-icon alert" />
+                      <span>{stats.withConcerns} avec alertes</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="trend-icon" />
+                      <span>Tout va bien</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -265,7 +350,7 @@ const TherapistDashboard = () => {
                 <p className="stat-label">Progression moyenne</p>
                 <div className="stat-trend">
                   <Star className="trend-icon" />
-                  <span>Dernier mois</span>
+                  <span>Basé sur {patients.filter(p => p.emotionCount > 0).length} patients</span>
                 </div>
               </div>
             </div>
@@ -364,63 +449,94 @@ const TherapistDashboard = () => {
                       <div 
                         className="patient-avatar"
                         style={{ 
-                          background: `linear-gradient(135deg, ${getProgressColor(patient.progress)} 0%, ${getEmotionColor('joie')} 100%)` 
+                          background: patient.hasData
+                            ? `linear-gradient(135deg, ${getProgressColor(patient.progress)} 0%, ${getEmotionColor('joie')} 100%)`
+                            : 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
                         }}
                       >
-                        {patient.firstName.charAt(0)}
+                        {patient.firstName?.charAt(0) || '?'}
                       </div>
                       <div className="patient-info">
                         <h3 className="patient-name">
-                          {patient.firstName} {patient.lastName}
+                          {patient.firstName || 'Nouveau'} {patient.lastName || ''}
                         </h3>
                         <div className="patient-details">
-                          <span className="patient-age">{patient.age} ans</span>
-                          <span className="patient-gender">{patient.gender === 'male' ? 'Garçon' : 'Fille'}</span>
-                          <span className={`patient-level patient-level-${patient.autismLevel?.toLowerCase()}`}>
-                            {patient.autismLevel}
-                          </span>
+                          {patient.age && (
+                            <span className="patient-age">{patient.age} ans</span>
+                          )}
+                          {patient.gender && (
+                            <span className="patient-gender">
+                              {patient.gender === 'male' ? 'Garçon' : 'Fille'}
+                            </span>
+                          )}
+                          {patient.autismLevel && (
+                            <span className={`patient-level patient-level-${patient.autismLevel?.toLowerCase()}`}>
+                              {patient.autismLevel}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     <div className="patient-progress">
                       <div className="progress-header">
-                        <span className="progress-label">Progression émotionnelle</span>
-                        <span className="progress-value" style={{ color: getProgressColor(patient.progress) }}>
-                          {patient.progress}%
+                        <span className="progress-label">
+                          {patient.hasData ? 'Progression émotionnelle' : 'Pas de données'}
                         </span>
+                        {patient.hasData && (
+                          <span className="progress-value" style={{ color: getProgressColor(patient.progress) }}>
+                            {patient.progress}%
+                          </span>
+                        )}
                       </div>
-                      <div className="progress-bar">
-                        <div 
-                          className="progress-fill"
-                          style={{ 
-                            width: `${patient.progress}%`,
-                            background: `linear-gradient(90deg, ${getProgressColor(patient.progress)} 0%, ${getEmotionColor('joie')} 100%)`
-                          }}
-                        >
-                          <div className="progress-glow"></div>
+                      {patient.hasData ? (
+                        <div className="progress-bar">
+                          <div 
+                            className="progress-fill"
+                            style={{ 
+                              width: `${patient.progress}%`,
+                              background: `linear-gradient(90deg, ${getProgressColor(patient.progress)} 0%, ${getEmotionColor('joie')} 100%)`
+                            }}
+                          >
+                            <div className="progress-glow"></div>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="no-data-message">
+                          <span className="no-data-text">
+                            Aucune émotion enregistrée. Ajoutez-en une !
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="patient-actions">
                       <div className="activity-info">
-                        <span className="activity-label">
-                          {patient.concerns > 0 ? (
-                            <>
-                              <AlertCircle className="alert-icon" />
-                              {patient.concerns} alerte{patient.concerns > 1 ? 's' : ''}
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="check-icon" />
-                              Pas d'alerte
-                            </>
-                          )}
-                        </span>
-                        <span className="activity-time">
-                          {formatDate(patient.lastActivity)}
-                        </span>
+                        {patient.hasData ? (
+                          <>
+                            <span className="activity-label">
+                              {patient.concerns > 0 ? (
+                                <>
+                                  <AlertCircle className="alert-icon" />
+                                  {patient.concerns} alerte{patient.concerns > 1 ? 's' : ''}
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="check-icon" />
+                                  Pas d'alerte
+                                </>
+                              )}
+                            </span>
+                            <span className="activity-time">
+                              {formatDate(patient.lastActivity)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="activity-label">
+                            <Clock className="check-icon" />
+                            En attente de données
+                          </span>
+                        )}
                       </div>
                       <div className="action-buttons">
                         <button
@@ -433,16 +549,18 @@ const TherapistDashboard = () => {
                         >
                           <Plus className="action-icon" />
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGenerateReport(patient._id);
-                          }}
-                          className="action-btn btn-primary"
-                          title="Générer rapport IA"
-                        >
-                          <Brain className="action-icon" />
-                        </button>
+                        {patient.hasData && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGenerateReport(patient._id);
+                            }}
+                            className="action-btn btn-primary"
+                            title="Générer rapport IA"
+                          >
+                            <Brain className="action-icon" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -465,26 +583,31 @@ const TherapistDashboard = () => {
                   <div className="empty-activity">
                     <Activity className="empty-icon" />
                     <p className="empty-text">Aucune activité récente</p>
+                    <p className="empty-subtext">
+                      Les émotions apparaîtront ici lorsqu'elles seront enregistrées
+                    </p>
                   </div>
                 ) : (
                   <div className="activity-list">
                     {recentActivity.map((activity, index) => (
                       <div 
-                        key={activity._id} 
+                        key={activity._id || index} 
                         className="activity-item"
                         style={{ animationDelay: `${index * 0.05}s` }}
                       >
                         <div className="activity-header">
-                          <span className="activity-patient">{activity.patientName}</span>
+                          <span className="activity-patient">{activity.patientName || 'Patient'}</span>
                           <span className="activity-time">{formatDate(activity.timestamp)}</span>
                         </div>
                         <div className="activity-content">
-                          <div className="emotion-badge" style={{ 
-                            backgroundColor: `${getEmotionColor(activity.emotion)}20`,
-                            color: getEmotionColor(activity.emotion)
-                          }}>
-                            {activity.emotion}
-                          </div>
+                          {activity.emotion && (
+                            <div className="emotion-badge" style={{ 
+                              backgroundColor: `${getEmotionColor(activity.emotion)}20`,
+                              color: getEmotionColor(activity.emotion)
+                            }}>
+                              {activity.emotion}
+                            </div>
+                          )}
                           {activity.intensity && (
                             <div className="intensity-indicator">
                               <div className="intensity-track">
@@ -523,12 +646,16 @@ const TherapistDashboard = () => {
                     <span className="stat-label">Alertes actives</span>
                   </div>
                   <div className="quick-stat">
-                    <span className="stat-number">{Math.round(stats.totalEmotions / patients.length)}</span>
+                    <span className="stat-number">
+                      {patients.length > 0 ? Math.round(stats.totalEmotions / patients.length) : 0}
+                    </span>
                     <span className="stat-label">Moyenne émotions/patient</span>
                   </div>
                   <div className="quick-stat">
-                    <span className="stat-number">{patients.length > 0 ? patients[0].firstName : '-'}</span>
-                    <span className="stat-label">Dernière activité</span>
+                    <span className="stat-number">
+                      {patients.filter(p => p.hasData).length}
+                    </span>
+                    <span className="stat-label">Patients avec données</span>
                   </div>
                 </div>
               </div>
@@ -825,8 +952,11 @@ const TherapistDashboard = () => {
           align-items: center;
           gap: 0.5rem;
           font-size: 0.75rem;
-          color: #16a34a;
           font-weight: 500;
+        }
+
+        .stat-trend .alert {
+          color: #dc2626;
         }
 
         .trend-icon {
@@ -1031,15 +1161,6 @@ const TherapistDashboard = () => {
           }
         }
 
-        @media (min-width: 1280px) {
-          .dashboard-section {
-            grid-column: span 2;
-          }
-          .dashboard-sidebar {
-            grid-column: span 1;
-          }
-        }
-
         .patient-card {
           background: white;
           border-radius: 1.5rem;
@@ -1197,6 +1318,19 @@ const TherapistDashboard = () => {
           100% { transform: translateX(100%); }
         }
 
+        .no-data-message {
+          padding: 0.75rem;
+          background: #f9fafb;
+          border-radius: 0.75rem;
+          text-align: center;
+        }
+
+        .no-data-text {
+          font-size: 0.875rem;
+          color: #9ca3af;
+          font-style: italic;
+        }
+
         .patient-actions {
           display: flex;
           align-items: center;
@@ -1267,21 +1401,6 @@ const TherapistDashboard = () => {
           margin-bottom: 3rem;
         }
 
-        @media (min-width: 1280px) {
-          .dashboard-section, .dashboard-sidebar {
-            display: contents;
-          }
-          
-          .dashboard-section {
-            grid-column: 1 / 3;
-          }
-          
-          .dashboard-sidebar {
-            grid-column: 3 / 4;
-            grid-row: 2;
-          }
-        }
-
         .sidebar-card {
           background: white;
           border-radius: 1.5rem;
@@ -1328,6 +1447,13 @@ const TherapistDashboard = () => {
         .empty-text {
           color: #9ca3af;
           font-size: 0.875rem;
+          font-weight: 600;
+          margin-bottom: 0.25rem;
+        }
+
+        .empty-subtext {
+          color: #9ca3af;
+          font-size: 0.75rem;
         }
 
         .activity-list {

@@ -71,7 +71,7 @@ router.get('/', childController.getMyChildren);
 // @desc    Obtenir les détails d'un enfant
 // @access  Private
 router.get('/:id', childController.getChildById);
-
+router.delete('/:id/therapist-assignment', childController.removeTherapistAssignment);
 // @route   PUT /api/children/:id
 // @desc    Mettre à jour un enfant
 // @access  Private

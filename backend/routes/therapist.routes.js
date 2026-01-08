@@ -61,6 +61,74 @@ router.get('/search-parents', async (req, res) => {
   }
 });
 
+router.delete('/patients/:childId', async (req, res) => {
+  try {
+    const { childId } = req.params;
+
+    console.log('Unassign request - therapist:', req.user._id, 'child:', childId);
+
+    // 1. Trouver le profil thérapeute
+    const therapist = await Therapist.findOne({ userId: req.user._id });
+    if (!therapist) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil thérapeute non trouvé'
+      });
+    }
+
+    // 2. Vérifier que l'enfant existe
+    const child = await Child.findById(childId);
+    if (!child) {
+      return res.status(404).json({
+        success: false,
+        message: 'Enfant non trouvé'
+      });
+    }
+
+    // 3. Chercher la relation ChildTherapist existante
+    const assignment = await ChildTherapist.findOne({
+      childId: child._id,
+      therapistId: therapist._id,
+      status: 'active'
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cet enfant n\'est pas assigné à vous'
+      });
+    }
+
+    // 4. Option 1: Supprimer complètement la relation
+    // await assignment.deleteOne();
+
+    // Option 2: Mettre le status à "inactive" (recommandé pour garder l'historique)
+    assignment.status = 'inactive';
+    assignment.endDate = new Date();
+    await assignment.save();
+
+    console.log('Assignment removed/inactivated:', assignment._id);
+
+    res.json({
+      success: true,
+      message: 'Vous avez été désassigné de cet enfant',
+      data: {
+        childId: child._id,
+        childName: `${child.firstName} ${child.lastName}`,
+        unassignedAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error('Error unassigning patient:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la désassignation',
+      error: error.message
+    });
+  }
+});
+
 // ============================================
 // @desc    Créer un enfant et l'assigner à un parent + thérapeute
 // @route   POST /api/therapist/children
