@@ -4,6 +4,19 @@
   padding: 2rem;
   text-align: center;
 }
+/* Pour les cartes patient */
+.patient-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Pour le contenu scrollable si nécessaire */
+.scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 .logo {
   height: 6em;

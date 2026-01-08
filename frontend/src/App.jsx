@@ -2,14 +2,19 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import TherapistPatients from './pages/TherapistPatients';
 
 // Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import TherapistDashboard from './pages/TherapistDashboard';
 import ChildrenList from './pages/ChildrenList';
 import ChildForm from './pages/ChildForm';
+import ChildProfile from './pages/ChildProfile';
 import EmotionsPage from './pages/EmotionsPage';
+import AdvancedStatistics from './pages/AdvancedStatics';
+import AddEmotion from './pages/AddEmotion';
 
 // Components
 import Loading from './components/common/loading';
@@ -33,7 +38,6 @@ const ProtectedRoute = ({ children }) => {
 
 // ============================================
 // PUBLIC ROUTE COMPONENT
-// Redirige vers dashboard si déjà connecté
 // ============================================
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -50,6 +54,19 @@ const PublicRoute = ({ children }) => {
 };
 
 // ============================================
+// ROLE-BASED REDIRECT
+// ============================================
+const DashboardRedirect = () => {
+  const { user } = useAuth();
+  
+  if (user?.role === 'therapist') {
+    return <Navigate to="/therapist/dashboard" replace />;
+  }
+  
+  return <Dashboard />;
+};
+
+// ============================================
 // APP ROUTES
 // ============================================
 function AppRoutes() {
@@ -59,7 +76,6 @@ function AppRoutes() {
       {/* PUBLIC ROUTES */}
       {/* ==================== */}
       
-      {/* Login */}
       <Route
         path="/login"
         element={
@@ -69,7 +85,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Register */}
       <Route
         path="/register"
         element={
@@ -80,20 +95,28 @@ function AppRoutes() {
       />
 
       {/* ==================== */}
-      {/* PROTECTED ROUTES */}
+      {/* PROTECTED ROUTES - COMMON */}
       {/* ==================== */}
 
-      {/* Dashboard */}
+      {/* Dashboard (redirection selon rôle) */}
       <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <DashboardRedirect />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/therapist/patients"
+        element={
+          <ProtectedRoute>
+            <TherapistPatients />
           </ProtectedRoute>
         }
       />
 
-      {/* Children List */}
+      {/* Children Routes */}
       <Route
         path="/children"
         element={
@@ -103,7 +126,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Add Child */}
       <Route
         path="/children/new"
         element={
@@ -113,7 +135,15 @@ function AppRoutes() {
         }
       />
 
-      {/* Edit Child */}
+      <Route
+        path="/children/:id"
+        element={
+          <ProtectedRoute>
+            <ChildProfile />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/children/:id/edit"
         element={
@@ -123,17 +153,7 @@ function AppRoutes() {
         }
       />
 
-      {/* Child Profile (à implémenter) */}
-      <Route
-        path="/children/:id"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Emotions Page */}
+      {/* Emotions */}
       <Route
         path="/emotions"
         element={
@@ -143,12 +163,22 @@ function AppRoutes() {
         }
       />
 
-      {/* Statistics (utilise EmotionsPage pour l'instant) */}
+      {/* Add Emotion */}
+      <Route
+        path="/emotions/new"
+        element={
+          <ProtectedRoute>
+            <AddEmotion />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Statistics */}
       <Route
         path="/statistics"
         element={
           <ProtectedRoute>
-            <EmotionsPage />
+            <AdvancedStatistics />
           </ProtectedRoute>
         }
       />
@@ -174,13 +204,59 @@ function AppRoutes() {
       />
 
       {/* ==================== */}
+      {/* THERAPIST ROUTES */}
+      {/* ==================== */}
+
+      <Route
+        path="/therapist/dashboard"
+        element={
+          <ProtectedRoute>
+            <TherapistDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/therapist/patients"
+        element={
+          <ProtectedRoute>
+            <TherapistDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/therapist/patients/:id"
+        element={
+          <ProtectedRoute>
+            <ChildProfile />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/therapist/sessions"
+        element={
+          <ProtectedRoute>
+            <TherapistDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/therapist/reports"
+        element={
+          <ProtectedRoute>
+            <TherapistDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ==================== */}
       {/* REDIRECTS */}
       {/* ==================== */}
 
-      {/* Root redirect to dashboard */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-      {/* 404 - redirect to dashboard */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
@@ -201,7 +277,6 @@ function App() {
           reverseOrder={false}
           gutter={8}
           toastOptions={{
-            // Default options
             duration: 4000,
             style: {
               background: '#fff',
@@ -210,8 +285,6 @@ function App() {
               borderRadius: '8px',
               boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
             },
-            
-            // Success
             success: {
               duration: 3000,
               iconTheme: {
@@ -222,8 +295,6 @@ function App() {
                 border: '1px solid #10b981',
               },
             },
-            
-            // Error
             error: {
               duration: 5000,
               iconTheme: {
@@ -234,8 +305,6 @@ function App() {
                 border: '1px solid #ef4444',
               },
             },
-            
-            // Loading
             loading: {
               iconTheme: {
                 primary: '#0ea5e9',

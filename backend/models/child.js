@@ -7,7 +7,7 @@ const childSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
-    index: true // Index pour recherche rapide
+    index: true
   },
   firstName: {
     type: String,
@@ -25,20 +25,7 @@ const childSchema = new mongoose.Schema({
   },
   dateOfBirth: {
     type: Date,
-    required: [true, 'Date de naissance requise'],
-    validate: {
-      validator: function(value) {
-        // L'enfant doit avoir entre 0 et 18 ans
-        const today = new Date();
-        const age = today.getFullYear() - value.getFullYear();
-        const monthDiff = today.getMonth() - value.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < value.getDate())) {
-          return age - 1 >= 0 && age - 1 <= 18;
-        }
-        return age >= 0 && age <= 18;
-      },
-      message: 'L\'enfant doit avoir entre 0 et 18 ans'
-    }
+    required: [true, 'Date de naissance requise']
   },
   gender: {
     type: String,
@@ -54,7 +41,6 @@ const childSchema = new mongoose.Schema({
     type: Date,
     validate: {
       validator: function(value) {
-        // La date de diagnostic ne peut pas être après aujourd'hui
         return !value || value <= new Date();
       },
       message: 'La date de diagnostic ne peut pas être dans le futur'
@@ -68,27 +54,56 @@ const childSchema = new mongoose.Schema({
     type: String,
     maxlength: [2000, 'Maximum 2000 caractères']
   },
+  
+  // CORRECTION : Mettre à jour les allergies pour accepter des objets
   allergies: [{
-    type: String,
-    trim: true
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    severity: {
+      type: String,
+      enum: ['mild', 'moderate', 'severe'],
+      default: 'mild'
+    },
+    notes: {
+      type: String,
+      trim: true
+    }
   }],
+  
+  // Déjà correct
   medications: [{
     name: {
       type: String,
-      required: true
+      required: true,
+      trim: true
     },
     dosage: String,
     frequency: String,
+    prescribedBy: String,  // AJOUTER
     startDate: Date
   }],
+  
+  // CORRECTION : Mettre à jour les besoins spéciaux
   specialNeeds: [{
-    type: String,
-    trim: true
+    type: {
+      type: String,
+      required: true,
+      enum: ['communication', 'social', 'behavioral', 'sensory', 'learning', 'physical', 'medical']
+    },
+    description: {
+      type: String,
+      trim: true
+    },
+    accommodations: [{
+      type: String,
+      trim: true
+    }]
   }],
 
-  // ============================================
-  // AJOUTS INDISPENSABLES POUR LE CODE MAGIQUE
-  // ============================================
+  // Login code
   loginCode: {
     type: String,
     required: true,
@@ -101,13 +116,12 @@ const childSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-
-  // Nom affiché dans l'app enfant (plus simple que prénom + nom)
+  
   displayName: {
     type: String,
     trim: true,
     default: function() {
-      return this.firstName; // Par défaut le prénom
+      return this.firstName;
     }
   }
 }, {

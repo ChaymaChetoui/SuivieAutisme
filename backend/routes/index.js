@@ -9,7 +9,7 @@ const authRoutes = require('./authRoutes');
 const childRoutes = require('./childRoutes');
 const emotionRoutes = require('./emotionRoutes');
 const aiRoutes = require('./aiRoutes');
-
+const therapistRoutes = require('./therapist.routes');
 
 
 // ============================================
@@ -28,6 +28,7 @@ router.use('/api/children', childRoutes);
 
 // Routes des émotions
 router.use('/api/emotions', emotionRoutes);
+router.use('/api/therapist', therapistRoutes);
 
 // Routes IA
 router.use('/api/ai', aiRoutes);

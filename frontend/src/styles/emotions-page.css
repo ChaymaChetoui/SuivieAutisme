@@ -1,0 +1,125 @@
+.emotions-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.emotions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.filters-card .filters-grid {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.filters-card label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.filters-card select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.emotions-list-card {
+  padding: 20px;
+}
+
+.emotions-list-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.emotions-list-actions button {
+  margin-left: 10px;
+}
+
+.no-emotions {
+  text-align: center;
+  padding: 40px 0;
+  color: #555;
+}
+
+.emotions-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Carte émotion */
+.emotion-card {
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  padding: 15px;
+  transition: all 0.2s;
+}
+.emotion-card:hover {
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+/* Header de la carte */
+.emotion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.emotion-header .emotion-source,
+.emotion-header .emotion-date {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Contexte */
+.emotion-context {
+  margin-bottom: 8px;
+  color: #333;
+}
+
+/* Meta infos */
+.emotion-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: #555;
+}
+
+/* Triggers */
+.emotion-triggers {
+  margin-top: 8px;
+}
+.emotion-triggers span {
+  display: inline-block;
+  padding: 2px 6px;
+  margin-right: 4px;
+  background-color: #eee;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+/* Notes */
+.emotion-notes {
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 5px;
+  color: #555;
+}0
+
+/* Couleurs par émotion */
+.emotion-joie { background-color: #fffd87; border-color: #ffec99; }
+.emotion-tristesse { background-color: #e0f0ff; border-color: #99d4ff; }
+.emotion-colère { background-color: #ffe0e0; border-color: #ff9999; }
+.emotion-peur { background-color: #bc82e0; border-color: #c299ff; }
+.emotion-surprise { background-color: #ffe0f0; border-color: #ff99c9; }
+.emotion-dégoût { background-color: #e0ffe0; border-color: #99ff99; }
+.emotion-neutre { background-color: #ecebd8; border-color: #ccd9b2; }

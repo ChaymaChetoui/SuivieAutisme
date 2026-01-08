@@ -20,13 +20,18 @@ const emotionValidator = [
     .withMessage('Émotion invalide'),
   
   body('source')
-    .isIn(['camera_nlp', 'game', 'manual', 'parent_observation'])
+    .isIn(['camera_nlp', 'game', 'manual', 'parent_observation', 'chat'])
     .withMessage('Source invalide'),
   
   body('confidence')
-    .optional()
-    .isFloat({ min: 0, max: 100 })
-    .withMessage('La confiance doit être entre 0 et 100'),
+  .optional()
+  .custom((value) => {
+    // Accepte null ou un nombre entre 0 et 100
+    if (value === null || value === undefined) return true;
+    if (typeof value !== 'number') return false;
+    return value >= 0 && value <= 100;
+  })
+  .withMessage('La confiance doit être entre 0 et 100 ou null'),
   
   body('context')
     .optional()
@@ -65,7 +70,7 @@ router.get('/child/:childId', [
   query('limit').optional().isInt({ min: 1, max: 100 }),
   query('page').optional().isInt({ min: 1 }),
   query('emotion').optional().isIn(['joie', 'tristesse', 'colère', 'peur', 'surprise', 'neutre', 'dégoût']),
-  query('source').optional().isIn(['camera_nlp', 'game', 'manual', 'parent_observation'])
+  query('source').optional().isIn(['camera_nlp', 'game', 'manual', 'parent_observation', 'chat'])
 ], validate, emotionController.getEmotionsByChild);
 
 // @route   GET /api/emotions/:id

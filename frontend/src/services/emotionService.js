@@ -11,7 +11,7 @@ const emotionService = {
   // Obtenir les émotions d'un enfant
   getEmotionsByChild: async (childId, params = {}) => {
     const queryString = new URLSearchParams(params).toString();
-    const response = await api.get(`/api/emotions/child/${childId}?${queryString}`);
+    const response = await api.get(`/api/emotions/child/${childId}`);
     return response;
   },
 

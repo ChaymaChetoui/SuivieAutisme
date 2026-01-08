@@ -10,24 +10,9 @@ const mongoose = require('mongoose');
 // ============================================
 exports.createEmotion = async (req, res) => {
   try {
-    const {
-      childId,
-      emotion,
-      source,
-      confidence,
-      context,
-      imageUrl,
-      location,
-      triggers,
-      notes,
-      intensity,
-      duration,
-      resolution
-    } = req.body;
+    const { childId,  confidence, ...emotionData } = req.body;
 
-    // Vérifier que l'enfant existe et appartient à l'utilisateur
     const child = await Child.findById(childId);
-    
     if (!child) {
       return res.status(404).json({
         success: false,
@@ -35,27 +20,37 @@ exports.createEmotion = async (req, res) => {
       });
     }
 
-    if (child.parentId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    // Vérification d'accès selon le rôle
+    let hasAccess = false;
+
+    if (req.user.role === 'parent') {
+      if (child.parentId.toString() === req.user._id.toString()) {
+        hasAccess = true;
+      }
+    } else if (req.user.role === 'therapist') {
+      const therapist = await Therapist.findOne({ userId: req.user._id });
+      if (therapist) {
+        const assignment = await ChildTherapist.findOne({
+          childId,
+          therapistId: therapist._id,
+          status: 'active'
+        });
+        if (assignment) hasAccess = true;
+      }
+    } else if (req.user.role === 'admin') {
+      hasAccess = true;
+    }
+
+    if (!hasAccess) {
       return res.status(403).json({
         success: false,
-        message: 'Accès non autorisé'
+        message: 'Accès non autorisé à cet enfant'
       });
     }
 
-    // Créer l'enregistrement d'émotion
     const emotionRecord = await EmotionRecord.create({
-      childId,
-      emotion,
-      source,
-      confidence,
-      context,
-      imageUrl,
-      location,
-      triggers,
-      notes,
-      intensity,
-      duration,
-      resolution
+      childId,confidence: confidence || null, 
+      ...emotionData
     });
 
     res.status(201).json({
@@ -68,23 +63,26 @@ exports.createEmotion = async (req, res) => {
     console.error('Erreur création émotion:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de l\'enregistrement de l\'émotion',
+      message: 'Erreur serveur',
       error: error.message
     });
   }
 };
+
+  
 
 // ============================================
 // @desc    Obtenir toutes les émotions d'un enfant
 // @route   GET /api/emotions/child/:childId
 // @access  Private
 // ============================================
+// Dans la méthode getEmotionsByChild
 exports.getEmotionsByChild = async (req, res) => {
   try {
     const { childId } = req.params;
     const { limit = 50, page = 1, emotion, source, startDate, endDate } = req.query;
 
-    // Vérifier que l'enfant existe et appartient à l'utilisateur
+    // Vérifier que l'enfant existe
     const child = await Child.findById(childId);
     
     if (!child) {
@@ -94,10 +92,33 @@ exports.getEmotionsByChild = async (req, res) => {
       });
     }
 
-    if (child.parentId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    // Vérifier l'accès selon le rôle
+    let hasAccess = false;
+
+    if (req.user.role === 'parent') {
+      // Parent : vérifier que c'est son enfant
+      if (child.parentId.toString() === req.user._id.toString()) {
+        hasAccess = true;
+      }
+    } else if (req.user.role === 'therapist') {
+      // Thérapeute : vérifier qu'il est assigné à cet enfant
+      const therapist = await Therapist.findOne({ userId: req.user._id });
+      if (therapist) {
+        const assignment = await ChildTherapist.findOne({
+          childId: child._id,
+          therapistId: therapist._id,
+          status: 'active'
+        });
+        if (assignment) hasAccess = true;
+      }
+    } else if (req.user.role === 'admin') {
+      hasAccess = true;
+    }
+
+    if (!hasAccess) {
       return res.status(403).json({
         success: false,
-        message: 'Accès non autorisé'
+        message: 'Accès non autorisé à cet enfant'
       });
     }
 
@@ -147,7 +168,6 @@ exports.getEmotionsByChild = async (req, res) => {
     });
   }
 };
-
 // ============================================
 // @desc    Obtenir une émotion par ID
 // @route   GET /api/emotions/:id
@@ -296,26 +316,64 @@ exports.getEmotionStats = async (req, res) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - parseInt(days));
 
-    // Correction : utiliser new mongoose.Types.ObjectId()
+    // FIX: Utiliser new mongoose.Types.ObjectId()
     const stats = await EmotionRecord.aggregate([
       {
         $match: {
-          childId: new mongoose.Types.ObjectId(childId), // ← AJOUT DE "new"
+          childId: new mongoose.Types.ObjectId(childId),
           timestamp: { $gte: startDate }
         }
       },
       {
-        $group: {
-          _id: '$emotion',
-          count: { $sum: 1 },
-          avgIntensity: { $avg: '$intensity' },
-          avgConfidence: { $avg: '$confidence' }
+        $facet: {
+          byEmotion: [
+            {
+              $group: {
+                _id: '$emotion',
+                count: { $sum: 1 },
+                avgIntensity: { $avg: '$intensity' },
+                avgConfidence: { $avg: '$confidence' }
+              }
+            },
+            { $sort: { count: -1 } }
+          ],
+          bySource: [
+            {
+              $group: {
+                _id: '$source',
+                count: { $sum: 1 }
+              }
+            }
+          ],
+          byLocation: [
+            {
+              $group: {
+                _id: '$location',
+                count: { $sum: 1 }
+              }
+            }
+          ],
+          overall: [
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                avgIntensity: { $avg: '$intensity' },
+                avgDuration: { $avg: '$duration' }
+              }
+            }
+          ]
         }
-      },
-      { $sort: { count: -1 } }
+      }
     ]);
 
-    res.json(stats); // Ton frontend attend directement une liste [{_id: "joie", count: 2}, ...]
+    res.json({
+      success: true,
+      data: {
+        period: `${days} derniers jours`,
+        statistics: stats[0]
+      }
+    });
 
   } catch (error) {
     console.error('Erreur stats émotions:', error);
@@ -326,6 +384,7 @@ exports.getEmotionStats = async (req, res) => {
     });
   }
 };
+
 // ============================================
 // @desc    Obtenir la timeline des émotions
 // @route   GET /api/emotions/child/:childId/timeline
@@ -345,7 +404,8 @@ exports.getEmotionTimeline = async (req, res) => {
       });
     }
 
-    const query = { childId: mongoose.Types.ObjectId(childId) };
+    // FIX: Utiliser new mongoose.Types.ObjectId()
+    const query = { childId: new mongoose.Types.ObjectId(childId) };
 
     if (startDate || endDate) {
       query.timestamp = {};
@@ -404,11 +464,11 @@ exports.getEmotionHeatmap = async (req, res) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Grouper par jour de la semaine et heure
+    // FIX: Utiliser new mongoose.Types.ObjectId()
     const heatmap = await EmotionRecord.aggregate([
       {
         $match: {
-          childId: mongoose.Types.ObjectId(childId),
+          childId: new mongoose.Types.ObjectId(childId),
           timestamp: { $gte: thirtyDaysAgo }
         }
       },
